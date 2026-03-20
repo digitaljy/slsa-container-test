@@ -72,7 +72,6 @@ jobs:
       contents: read
       actions: read
       packages: write
-      id-token: write
     steps:
       - uses: sigstore/cosign-installer@v3
       
@@ -96,6 +95,9 @@ jobs:
   sbom:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
     steps:
       - uses: anchore/sbom-action@v0
         with:
