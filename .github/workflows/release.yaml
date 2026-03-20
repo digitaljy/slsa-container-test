@@ -61,6 +61,24 @@ jobs:
           cosign sign --yes \
               "$IMAGE"
 
+      - name: Scan image
+        uses: anchore/scan-action@v7
+        with:
+          image: "ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}"
+
+      - uses: anchore/sbom-action@v0
+        with:
+          image: "ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}"
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "${{ steps.meta.outputs.tags }}"
+      
+      - uses: anchore/sbom-action/publish-sbom@v0
+        with:
+          sbom-artifact-match: ".*\\.spdx$"
+
       - name: Output image
         id: image
         run: |
