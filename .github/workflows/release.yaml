@@ -105,7 +105,7 @@ jobs:
       
       - uses: anchore/sbom-action/publish-sbom@v0
         with:
-          sbom-artifact-match: ".*\\.spdx$"
+          sbom-artifact-match: ".*\\.spdx.json$"
 
   provenance:
     needs: [build, sign]
