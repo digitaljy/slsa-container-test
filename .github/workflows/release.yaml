@@ -63,7 +63,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "${{ steps.meta.outputs.tags }}"
+          tag_name: "${{ github.ref_name }}"
 
   sign:
     runs-on: ubuntu-latest
