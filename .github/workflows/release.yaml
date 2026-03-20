@@ -13,7 +13,7 @@ jobs:
   # This step builds our image, pushes it, and outputs the repo hash digest.
   build:
     permissions:
-      contents: read
+      contents: write
       packages: write
     outputs:
       image: ${{ steps.image.outputs.image }}
