@@ -100,7 +100,7 @@ jobs:
 
           cosign attest --yes \
             --predicate "$SBOM_FILE" \
-            --type spdx \
+            --type spdxjson \
             "$IMAGE_REF"
 
   provenance:
@@ -141,18 +141,61 @@ jobs:
           sudo mv oras-install/oras /usr/local/bin/
           rm -rf oras_${VERSION}_*.tar.gz oras-install/
 
-      - name: Download provenance
-        uses: actions/download-artifact@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          name: slsa-provenance
-          path: .
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Attach provenance as OCI referrer
+      # ✅ 1. Discover provenance manifest digest from GHCR
+      - name: Discover provenance artifact digest
+        id: discover
         run: |
           IMAGE="ghcr.io/${{ github.repository }}@${{ needs.build.outputs.digest }}"
-          PROV_FILE="provenance.intoto.jsonl"
 
-          oras push \
-            "$IMAGE" \
+          # Query OCI referrers and filter only SLSA provenance (in-toto)
+          oras discover "$IMAGE" \
             --artifact-type application/vnd.in-toto+json \
-            provenance=$PROV_FILE
+            --output json > referrers.json
+
+          # Extract digest of the provenance OCI artifact manifest
+          PROV_DIGEST=$(jq -r '.referrers[0].digest' referrers.json)
+
+          echo "provenance_digest=$PROV_DIGEST" >> "$GITHUB_OUTPUT"
+
+      # ✅ 2. Fetch provenance manifest to extract the provenance *blob*
+      - name: Fetch provenance manifest
+        run: |
+          oras manifest fetch \
+            "ghcr.io/${{ github.repository }}@${{ steps.discover.outputs.provenance_digest }}" \
+            -o prov.manifest.json
+
+      # ✅ 3. Extract provenance blob digest
+      - name: Extract provenance blob digest
+        id: extract_blob
+        run: |
+          BLOB_DIGEST=$(jq -r '.blobs[0].digest' prov.manifest.json)
+          echo "blob_digest=$BLOB_DIGEST" >> "$GITHUB_OUTPUT"
+
+      # ✅ 4. Fetch provenance blob
+      - name: Download provenance blob
+        run: |
+          oras blob fetch \
+            "ghcr.io/${{ github.repository }}@${{ steps.extract_blob.outputs.blob_digest }}" \
+            -o provenance.intoto.jsonl
+
+      # ✅ 5. Reattach provenance as a referrer to the image
+      - name: Attach provenance as referrer
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}@${{ needs.build.outputs.digest }}"
+
+          oras attach "$IMAGE" \
+            --artifact-type application/vnd.in-toto+json \
+            provenance=provenance.intoto.jsonl
+
+      # ✅ 6. Verify the referrer is attached
+      - name: Verify referrers
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}@${{ needs.build.outputs.digest }}"
+          oras discover "$IMAGE" --output tree
